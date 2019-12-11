@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
-from league.models import Competition
+from league.models import Competition, Team
+
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
@@ -13,21 +14,23 @@ class GroupSerializer(serializers.HyperlinkedModelSerializer):
         model = Group
         fields = ['url', 'name']
 
-class AreaSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField(max_length=50)
 
-class CompetitionSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=50)
-    code = serializers.CharField(max_length=3)
-    area = AreaSerializer()
-
+class CompetitionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Competition
-        fields = ['name', 'code', 'area']
+        fields = ['id', 'name', 'code', 'area']
 
-    def create(self, validated_data):
-        """
-        Create and return a new `Competition` instance, given the validated data.
-        """
-        return Competition.objects.create(**validated_data)
+
+class TeamSerializer(serializers.ModelSerializer):
+    competition = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Team
+        fields = [
+            'name',
+            'tla',
+            'shortName',
+            'area',
+            'email',
+            'competition'
+        ]
