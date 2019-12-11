@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
-from league.models import Competition, Team
+from league.models import Competition, Team, Player
 
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
@@ -22,15 +22,26 @@ class CompetitionSerializer(serializers.ModelSerializer):
 
 
 class TeamSerializer(serializers.ModelSerializer):
-    competition = serializers.PrimaryKeyRelatedField(read_only=True)
-
     class Meta:
         model = Team
         fields = [
+            'id',
             'name',
             'tla',
             'shortName',
             'area',
             'email',
-            'competition'
+            'code'
+        ]
+
+class PlayerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Player
+        fields = [
+            'name',
+            'position',
+            'dateOfBirth',
+            'countryOfBirth',
+            'nationality',
+            'team_id',
         ]

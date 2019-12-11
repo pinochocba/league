@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User, Group
+from league.models import Team, Player
 from rest_framework import viewsets
 from league.serializers import UserSerializer, GroupSerializer, \
-    CompetitionSerializer, TeamSerializer
+    CompetitionSerializer, TeamSerializer, PlayerSerializer
 from league.models import Competition
 
 import requests
@@ -38,7 +39,7 @@ class CompetitionDetail(APIView):
         elif req.status_code == 404:
              response = status.HTTP_404_NOT_FOUND
         else:
-            response =  status.HTTP_504_GATEWAY_TIMEOUT
+            response = status.HTTP_504_GATEWAY_TIMEOUT
         return response
     
     def get_teams(self, url):
@@ -47,8 +48,7 @@ class CompetitionDetail(APIView):
             data = req.json()
             for team in data['teams']:
                 team['area'] = team['area']['name']
-                team['competition'] = data['competition']['id']
-                print(team)
+                team['code'] = data['competition']['code']
                 serializer = TeamSerializer(data=team)
                 if serializer.is_valid():
                     serializer.save()
@@ -58,7 +58,36 @@ class CompetitionDetail(APIView):
         elif req.status_code == 404:
              response = status.HTTP_404_NOT_FOUND
         else:
-            response =  status.HTTP_504_GATEWAY_TIMEOUT
+            response = status.HTTP_504_GATEWAY_TIMEOUT
+        return response
+
+    def get_players(self, code):
+        # Obtener la lista de Teams para 'code'
+        teams = Team.objects.filter(code=code)
+
+        # Para cada Team obtener lista de Players
+        for team in teams:
+            team_id = str(team.id)
+            url = self._base_url + 'teams/' + team_id
+            req = requests.get(url, headers=self._headers)
+            print(url + ' ' + str(req.status_code))
+            if req.status_code == requests.codes.ok:
+                data = req.json()
+                players = data['squad']
+                
+                # Se guarda el Player
+                for player in players:
+                    player['team_id'] = team_id
+                    serializer = PlayerSerializer(data=player)
+                    if serializer.is_valid():
+                        serializer.save()
+                        response = status.HTTP_201_CREATED
+                    else:
+                        response = status.HTTP_400_BAD_REQUEST
+            elif req.status_code == 404:
+                response = status.HTTP_404_NOT_FOUND
+            else:
+                response = status.HTTP_504_GATEWAY_TIMEOUT
         return response
     
     def get(self, request, code, format=None):
@@ -70,6 +99,8 @@ class CompetitionDetail(APIView):
             response = self.get_competition('competitions/{code}'.format(code=code))
             if response == status.HTTP_201_CREATED:
                 response = self.get_teams('competitions/{code}/teams'.format(code=code))
+                if response == status.HTTP_201_CREATED:
+                    response = self.get_players(code)
             return Response({'message': self._messages[response]}, status=response)
 
     def get_object(self, code):
@@ -79,9 +110,15 @@ class CompetitionDetail(APIView):
             raise Http404
 
     def delete(self, request, code, format=None):
-        print(code)
         competition = self.get_object(code)
         competition.delete()
+        teams = Team.objects.filter(code=code)
+        for team in teams:
+            team_id = str(team.id)
+            players = Player.objects.filter(team_id=team_id)
+            for player in players:
+                player.delete()
+            team.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
