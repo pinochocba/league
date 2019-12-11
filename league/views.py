@@ -10,20 +10,21 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+MESSAGES = {
+    status.HTTP_201_CREATED: "Successfully imported",
+    status.HTTP_400_BAD_REQUEST: "Bad request",
+    status.HTTP_404_NOT_FOUND: "Not found",
+    status.HTTP_409_CONFLICT: "League already imported",
+    status.HTTP_504_GATEWAY_TIMEOUT: "Server Error",
+}
+
 class CompetitionDetail(APIView):
     """
-    List all competitions
+    Lista todas las competiciones
     """
     _api_key = '4cb19628e52a4a3992ba1271e70ed174'
     _headers = {'X-Auth-Token': _api_key}
     _base_url = 'http://api.football-data.org/v2/'
-    _messages = {
-        status.HTTP_201_CREATED: "Successfully imported",
-        status.HTTP_400_BAD_REQUEST: "Bad request",
-        status.HTTP_404_NOT_FOUND: "Not found",
-        status.HTTP_409_CONFLICT: "League already imported",
-        status.HTTP_504_GATEWAY_TIMEOUT: "Server Error",
-    }
 
     def get_competition(self, url):
         req = requests.get(self._base_url + url, headers=self._headers)
@@ -54,6 +55,7 @@ class CompetitionDetail(APIView):
                     serializer.save()
                     response = status.HTTP_201_CREATED
                 else:
+                    # Nota: Existen teams con campos incorrectos
                     response = status.HTTP_400_BAD_REQUEST
         elif req.status_code == 404:
              response = status.HTTP_404_NOT_FOUND
@@ -92,16 +94,18 @@ class CompetitionDetail(APIView):
     
     def get(self, request, code, format=None):
         try:
+            # Si la competicion existe no se pide a la api
             competition = Competition.objects.get(code=code)
             serializer = CompetitionSerializer(competition)
             return Response(serializer.data, status=status.HTTP_409_CONFLICT)
         except Competition.DoesNotExist:
+            # Se hacen las consultas secuencialmente
             response = self.get_competition('competitions/{code}'.format(code=code))
             if response == status.HTTP_201_CREATED:
                 response = self.get_teams('competitions/{code}/teams'.format(code=code))
                 if response == status.HTTP_201_CREATED:
                     response = self.get_players(code)
-            return Response({'message': self._messages[response]}, status=response)
+            return Response({'message': MESSAGES[response]}, status=response)
 
     def get_object(self, code):
         try:
@@ -121,6 +125,29 @@ class CompetitionDetail(APIView):
             team.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+class TotalPlayers(APIView):
+    """
+    Numero total de players por competencia
+    """
+    def get_total_players(self, code, format=None):
+        total_players = 0
+        teams = Team.objects.filter(code=code)
+        for team in teams:
+            team_id = str(team.id)
+            players = Player.objects.filter(team_id=team_id)
+            total_players += players.count()
+        return total_players
+
+    def get(self, request, code, format=None):
+        try:
+            # Si existe la competicion calculamos el total de players
+            competition = Competition.objects.get(code=code)
+            total_players = self.get_total_players(code)
+            return Response({'total': total_players}, status=status.HTTP_200_OK)
+        except Competition.DoesNotExist:
+            response = status.HTTP_404_NOT_FOUND
+            return Response({'message': MESSAGES[response]}, status=response)
 
 class UserViewSet(viewsets.ModelViewSet):
     """
